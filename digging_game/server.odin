@@ -1,2 +1,0 @@
-package digging_game
-
