@@ -1,5 +1,6 @@
 package client
 
+import "../common"
 import rl "vendor:raylib"
 
 WINDOW_TITLE        :: "Digging Game"
@@ -19,12 +20,23 @@ main :: proc() {
     min_component :: proc(v: [2]i32) -> i32 {
         return min(v.x, v.y)
     }
-
     render_target := rl.LoadRenderTexture(TARGET_SIZE.x, TARGET_SIZE.y)
 
     // Init render state
     render_state: Render_State
     render_state.tile_atlas = rl.LoadTexture(ATLAS_PATH)
+
+    // Make temporary game state
+    game_state: common.Game_State
+    game_state.chunks[0] = {
+        position = {1, 0}
+    }
+    for &block in game_state.chunks[0].blocks {
+        block = .CAVE_FLOOR if rl.GetRandomValue(0, 1) == 0 else .CAVE_WALL
+    }
+    game_state.chunk_count = 1
+
+    update_world_renderer(&render_state, &game_state)
 
     // TODO: Start internal server
 
