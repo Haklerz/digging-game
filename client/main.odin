@@ -9,18 +9,16 @@ WINDOW_SIZE_INIT    :: [2]i32{1280, 720}
 
 ATLAS_PATH          :: "res/atlas.png"
 
-min_component :: #force_inline proc(v: [2]i32) -> i32 {
-    return min(v.x, v.y)
-}
-
 main :: proc() {
     // Init window
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_RESIZABLE})
     rl.InitWindow(WINDOW_SIZE_INIT.x, WINDOW_SIZE_INIT.y, WINDOW_TITLE)
     rl.SetWindowMinSize(TARGET_SIZE.x, TARGET_SIZE.y)
+    rl.SetTargetFPS(240) // Just in case v-sync is forced off for some reason
 
-    // Just in case v-sync is forced off for some reason
-    rl.SetTargetFPS(240)
+    min_component :: proc(v: [2]i32) -> i32 {
+        return min(v.x, v.y)
+    }
 
     render_target := rl.LoadRenderTexture(TARGET_SIZE.x, TARGET_SIZE.y)
 
