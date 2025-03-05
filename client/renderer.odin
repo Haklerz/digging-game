@@ -6,19 +6,19 @@ import rl "vendor:raylib"
 Render_State :: struct {
     tile_atlas      : rl.Texture2D,
 
-    chunks			: [common.MAX_LOADED_CHUNKS]Chunk_Renderer,
-    chunk_count		: uint,
+    chunks          : [common.MAX_LOADED_CHUNKS]Chunk_Renderer,
+    chunk_count     : uint,
 
     entity_renderer : Entity_Renderer
 }
 
 render :: proc(render_state: ^Render_State) {
-	using render_state
-	
-	// Render world
+    using render_state
+
+    // Render world
     for &chunk in chunks[:chunk_count] do chunk_render(&chunk)
 
-	// TODO: Render entities
+    // TODO: Render entities
 }
 
 Direction :: enum {
@@ -45,8 +45,8 @@ chunk_neighbourhood_get_block :: proc(neighbourhood: ^Chunk_Neighbourhood, block
 }
 
 update_chunk_renderer :: proc(
-	chunk_renderer: ^Chunk_Renderer,
-	chunk_neighbourhood: ^Chunk_Neighbourhood
+    chunk_renderer: ^Chunk_Renderer,
+    chunk_neighbourhood: ^Chunk_Neighbourhood
 ) {
 
 }

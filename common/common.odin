@@ -32,5 +32,5 @@ chunk_set_block :: proc(chunk: ^Chunk, block: [2]int, type: Block_Type) -> bool 
     if block.y < 0 || block.y >= CHUNK_SIZE do return false
 
     chunk.blocks[CHUNK_SIZE * block.y + block.x] = type
-	return true
+    return true
 }
