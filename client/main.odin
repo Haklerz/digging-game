@@ -10,6 +10,21 @@ WINDOW_SIZE_INIT    :: [2]i32{1280, 720}
 
 ATLAS_PATH          :: "res/atlas.png"
 
+make_chunk :: proc(game_state: ^common.Game_State, chunk_position: [2]int) {
+    assert(game_state.chunk_count < common.MAX_LOADED_CHUNKS)
+
+    game_state.chunks[game_state.chunk_count] = {
+        position = chunk_position
+    }
+
+    for &block in game_state.chunks[game_state.chunk_count].blocks {
+        block = .CAVE_FLOOR if rl.GetRandomValue(0, 1) == 0 else .CAVE_WALL
+    }
+
+    game_state.chunk_count += 1
+}
+
+
 main :: proc() {
     // Init window
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_RESIZABLE})
@@ -28,13 +43,9 @@ main :: proc() {
 
     // Make temporary game state
     game_state: common.Game_State
-    game_state.chunks[0] = {
-        position = {1, 0}
-    }
-    for &block in game_state.chunks[0].blocks {
-        block = .CAVE_FLOOR if rl.GetRandomValue(0, 1) == 0 else .CAVE_WALL
-    }
-    game_state.chunk_count = 1
+    make_chunk(&game_state, {0, 0})
+    make_chunk(&game_state, {1, 1})
+    make_chunk(&game_state, {2, 1})
 
     update_world_renderer(&render_state, &game_state)
 
