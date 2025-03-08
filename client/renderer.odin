@@ -2,6 +2,7 @@ package client
 
 import "../common"
 import rl "vendor:raylib"
+import "core:math"
 
 TILE_SIZE :: 8
 
@@ -18,7 +19,7 @@ render :: proc(render_state: ^Render_State) {
     using render_state
 
     // Render world
-    for &chunk in chunks[:chunk_count] do render_chunk(&chunk)
+    for &chunk in chunks[:chunk_count] do render_chunk(&render_state.tile_atlas, &chunk)
 
     // TODO: Render entities
 }
@@ -84,13 +85,35 @@ Chunk_Renderer :: struct {
     tile_ids: [common.CHUNK_SIZE * common.CHUNK_SIZE]u8
 }
 
-render_chunk :: proc(chunk: ^Chunk_Renderer) { // TODO: Take in camera
-    // TODO: Draw debug chunk outline
+// draw_tile :: proc(atlas: ^rl.Texture2D, index: int, pos: IVec2) {
+//     rl.DrawTextureRec(atlas^, {TILE_SIZE * f32(index % 32), TILE_SIZE * f32(index / 32), TILE_SIZE, TILE_SIZE}, {f32(pos.x), f32(pos.y)}, rl.WHITE)
+// }
+
+render_chunk :: proc(tile_atlas: ^rl.Texture2D, chunk: ^Chunk_Renderer) { // TODO: Take in camera
+
+    for tile_id, i in chunk.tile_ids {
+        tile_position, texture_source: [2]int
+
+        // TODO: Will need half a tile offset for dual grid tiles.
+        tile_position.y, tile_position.x = math.divmod(i, common.CHUNK_SIZE) // Tile offset from chunk in tile-space
+        tile_position += chunk.position * common.CHUNK_SIZE // Chunk offset in tile-space
+        tile_position *= TILE_SIZE
+
+        texture_source.y, texture_source.x = math.divmod(int(tile_id), 32)
+        texture_source *= TILE_SIZE
+
+        rl.DrawTextureRec(
+            tile_atlas^,
+            {f32(texture_source.x), f32(texture_source.y), TILE_SIZE, TILE_SIZE},
+            {f32(tile_position.x), f32(tile_position.y)},
+            rl.WHITE
+        )
+    }
 
     rl.DrawRectangleLines(
         TILE_SIZE * common.CHUNK_SIZE * i32(chunk.position.x), TILE_SIZE * common.CHUNK_SIZE * i32(chunk.position.y),
         TILE_SIZE * common.CHUNK_SIZE, TILE_SIZE * common.CHUNK_SIZE,
-        rl.GREEN
+        {0, 255, 0, 63}
     )
 }
 
