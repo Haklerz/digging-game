@@ -1,25 +1,26 @@
 package client
 
 import "../common"
-import rl "vendor:raylib"
+import sdl "vendor:sdl3"
 import "core:math"
 
 TILE_SIZE :: 8
 
 Render_State :: struct {
-    tile_atlas      : rl.Texture2D,
+    tile_atlas      : ^sdl.Surface,
 
+    // TODO: Re-introduce World_Renderer
     chunks          : [common.MAX_LOADED_CHUNKS]Chunk_Renderer,
     chunk_count     : uint,
 
     entity_renderer : Entity_Renderer
 }
 
-render :: proc(render_state: ^Render_State) {
+render :: proc(target_surface: ^sdl.Surface, render_state: ^Render_State) {
     using render_state
 
     // Render world
-    for &chunk in chunks[:chunk_count] do render_chunk(&render_state.tile_atlas, &chunk)
+    for &chunk in chunks[:chunk_count] do render_chunk(target_surface, render_state.tile_atlas, &chunk)
 
     // TODO: Render entities
 }
@@ -62,7 +63,8 @@ update_chunk_renderer :: proc(
     chunk_renderer: ^Chunk_Renderer,
     neighbourhood: Chunk_Neighbourhood
 ) {
-    chunk_renderer.position = neighbourhood.chunk.position
+    chunk_renderer.position.x = i32(neighbourhood.chunk.position.x)
+    chunk_renderer.position.y = i32(neighbourhood.chunk.position.y)
 
     // Just map blocks to tiles right now.
     // TODO: Will need to change when dual grid tiles are introduced.
@@ -81,40 +83,36 @@ update_chunk_renderer :: proc(
 }
 
 Chunk_Renderer :: struct {
-    position: [2]int,
+    position: [2]i32,
     tile_ids: [common.CHUNK_SIZE * common.CHUNK_SIZE]u8
 }
 
-// draw_tile :: proc(atlas: ^rl.Texture2D, index: int, pos: IVec2) {
-//     rl.DrawTextureRec(atlas^, {TILE_SIZE * f32(index % 32), TILE_SIZE * f32(index / 32), TILE_SIZE, TILE_SIZE}, {f32(pos.x), f32(pos.y)}, rl.WHITE)
-// }
-
-render_chunk :: proc(tile_atlas: ^rl.Texture2D, chunk: ^Chunk_Renderer) { // TODO: Take in camera
+render_chunk :: proc(target_surface, tile_atlas: ^sdl.Surface, chunk: ^Chunk_Renderer) { // TODO: Take in camera
 
     for tile_id, i in chunk.tile_ids {
-        tile_position, texture_source: [2]int
+        tile_position, texture_source: [2]i32
 
         // TODO: Will need half a tile offset for dual grid tiles.
-        tile_position.y, tile_position.x = math.divmod(i, common.CHUNK_SIZE) // Tile offset from chunk in tile-space
-        tile_position += chunk.position * common.CHUNK_SIZE // Chunk offset in tile-space
+        tile_position.y, tile_position.x = math.divmod(i32(i), i32(common.CHUNK_SIZE)) // Tile offset from chunk in tile-space
+        tile_position += chunk.position * i32(common.CHUNK_SIZE) // Chunk offset in tile-space
         tile_position *= TILE_SIZE
 
-        texture_source.y, texture_source.x = math.divmod(int(tile_id), 32)
+        texture_source.y, texture_source.x = math.divmod(i32(tile_id), 32)
         texture_source *= TILE_SIZE
 
-        rl.DrawTextureRec(
-            tile_atlas^,
-            {f32(texture_source.x), f32(texture_source.y), TILE_SIZE, TILE_SIZE},
-            {f32(tile_position.x), f32(tile_position.y)},
-            rl.WHITE
+        sdl.BlitSurface(
+            tile_atlas, {
+                texture_source.x, texture_source.y,
+                TILE_SIZE, TILE_SIZE
+            },
+            target_surface, {
+                tile_position.x, tile_position.y,
+                TILE_SIZE, TILE_SIZE
+            }
         )
     }
 
-    rl.DrawRectangleLines(
-        TILE_SIZE * common.CHUNK_SIZE * i32(chunk.position.x), TILE_SIZE * common.CHUNK_SIZE * i32(chunk.position.y),
-        TILE_SIZE * common.CHUNK_SIZE, TILE_SIZE * common.CHUNK_SIZE,
-        {0, 255, 0, 63}
-    )
+    // TODO: Draw debug outline
 }
 
 Entity_Renderer :: struct {}

@@ -1,14 +1,14 @@
 package client
 
 import "../common"
-import rl "vendor:raylib"
+import sdl "vendor:sdl3"
 
 WINDOW_TITLE        :: "Digging Game"
 
 TARGET_SIZE         :: [2]i32{ 426, 240}
 WINDOW_SIZE_INIT    :: [2]i32{1280, 720}
 
-ATLAS_PATH          :: "res/atlas.png"
+ATLAS_PATH          :: "res/atlas.bmp"
 
 make_chunk :: proc(game_state: ^common.Game_State, chunk_position: [2]int) {
     assert(game_state.chunk_count < common.MAX_LOADED_CHUNKS)
@@ -18,28 +18,33 @@ make_chunk :: proc(game_state: ^common.Game_State, chunk_position: [2]int) {
     }
 
     for &block in game_state.chunks[game_state.chunk_count].blocks {
-        block = .CAVE_FLOOR if rl.GetRandomValue(0, 1) == 0 else .CAVE_WALL
+        block = .CAVE_FLOOR if sdl.rand(2) == 0 else .CAVE_WALL
     }
 
     game_state.chunk_count += 1
 }
 
-
 main :: proc() {
-    // Init window
-    rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_RESIZABLE})
-    rl.InitWindow(WINDOW_SIZE_INIT.x, WINDOW_SIZE_INIT.y, WINDOW_TITLE)
-    rl.SetWindowMinSize(TARGET_SIZE.x, TARGET_SIZE.y)
-    rl.SetTargetFPS(240) // Just in case v-sync is forced off for some reason
+    // Init
+    if !sdl.Init({.VIDEO}) do return
 
+    window: ^sdl.Window
+    renderer: ^sdl.Renderer
+    if !sdl.CreateWindowAndRenderer(WINDOW_TITLE, WINDOW_SIZE_INIT.x, WINDOW_SIZE_INIT.y, {.RESIZABLE}, &window, &renderer) do return
+    defer sdl.DestroyWindow(window)
+    defer sdl.DestroyRenderer(renderer)
+
+    sdl.SetWindowMinimumSize(window, TARGET_SIZE.x, TARGET_SIZE.y)
+    
     min_component :: proc(v: [2]i32) -> i32 {
         return min(v.x, v.y)
     }
-    render_target := rl.LoadRenderTexture(TARGET_SIZE.x, TARGET_SIZE.y)
+    render_target := sdl.CreateTexture(renderer, .RGBA8888, .STREAMING, TARGET_SIZE.x, TARGET_SIZE.y) // TODO: Rename this
+    sdl.SetTextureScaleMode(render_target, .NEAREST)
 
     // Init render state
     render_state: Render_State
-    render_state.tile_atlas = rl.LoadTexture(ATLAS_PATH)
+    render_state.tile_atlas = sdl.LoadBMP(ATLAS_PATH)
 
     // Make temporary game state
     game_state: common.Game_State
@@ -51,31 +56,46 @@ main :: proc() {
 
     // TODO: Start internal server
 
-    for !rl.WindowShouldClose() {
+    event: sdl.Event
+    main_loop: for {
+        // Handle events
+        for sdl.PollEvent(&event) {
+            #partial switch event.type {
+            case .QUIT:
+                break main_loop
+            }
+        }
+
         // TODO: Update stuff here
 
+        // Draw to rendering target
+        target_surface: ^sdl.Surface
+        if sdl.LockTextureToSurface(render_target, nil, &target_surface) {
+            defer sdl.UnlockTexture(render_target)
+
+            sdl.ClearSurface(target_surface, 0, 0, 0, sdl.ALPHA_OPAQUE_FLOAT)
+            render(target_surface, &render_state)
+        }
+
         // Calculate letterboxing
-        window_size := [2]i32{rl.GetScreenWidth(), rl.GetScreenHeight()}
+        window_size: [2]i32
+        sdl.GetCurrentRenderOutputSize(renderer, &window_size.x, &window_size.y)
         scaled_target_size := min_component(window_size / TARGET_SIZE) * TARGET_SIZE
         target_position := (window_size - scaled_target_size) / 2
 
-        // Draw to rendering target
-        rl.BeginTextureMode(render_target)
-            rl.ClearBackground({0, 0, 0, 255})
-            render(&render_state)
-
-        rl.EndTextureMode()
-
         // Draw rendering target to screen
-        rl.BeginDrawing()
-            rl.ClearBackground({0x0c, 0x0c, 0x0c, 0xff})
-            rl.DrawFPS(1, 1)
-            rl.DrawTexturePro(render_target.texture,
-                {0, 0, f32(TARGET_SIZE.x), -f32(TARGET_SIZE.y)},
-                {f32(target_position.x), f32(target_position.y), f32(scaled_target_size.x), f32(scaled_target_size.y)},
-                {0, 0}, 0, rl.WHITE
-            )
-        rl.EndDrawing()
+        sdl.SetRenderDrawColor(renderer, 0x0c, 0x0c, 0x0c, sdl.ALPHA_OPAQUE)
+        sdl.RenderClear(renderer)
+
+        // TODO: Render FPS
+
+        destination_rect := sdl.FRect{
+            x = f32(target_position.x),
+            y = f32(target_position.y),
+            w = f32(scaled_target_size.x),
+            h = f32(scaled_target_size.y)
+        }
+        sdl.RenderTexture(renderer, render_target, nil, &destination_rect)
+        sdl.RenderPresent(renderer)
     }
-    rl.CloseWindow()
 }
