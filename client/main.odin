@@ -1,12 +1,13 @@
 package client
 
 import "../common"
+import "core:fmt"
 import sdl "vendor:sdl3"
 
 WINDOW_TITLE        :: "Digging Game"
 
-TARGET_SIZE         :: [2]i32{ 426, 240}
-WINDOW_SIZE_INIT    :: [2]i32{1280, 720}
+TARGET_SIZE         :: [2]i32{ 320, 240}
+WINDOW_SIZE_INIT    :: [2]i32{ 320 * 2, 240 * 2}
 
 ATLAS_PATH          :: "res/atlas.bmp"
 
@@ -24,6 +25,11 @@ make_chunk :: proc(game_state: ^common.Game_State, chunk_position: [2]int) {
     game_state.chunk_count += 1
 }
 
+Framerate_Info :: struct {
+    next_sample_time_ms: u64,
+    sample_frame_count: uint
+}
+
 main :: proc() {
     // Init
     if !sdl.Init({.VIDEO}) do return
@@ -35,6 +41,7 @@ main :: proc() {
     defer sdl.DestroyRenderer(renderer)
 
     sdl.SetWindowMinimumSize(window, TARGET_SIZE.x, TARGET_SIZE.y)
+    sdl.SetRenderVSync(renderer, 1)
     
     min_component :: proc(v: [2]i32) -> i32 {
         return min(v.x, v.y)
@@ -54,10 +61,21 @@ main :: proc() {
 
     update_world_renderer(&render_state, &game_state)
 
+    framerate_info := Framerate_Info{}
+
     // TODO: Start internal server
 
     event: sdl.Event
     main_loop: for {
+        current_time_ms := sdl.GetTicks()
+        defer framerate_info.sample_frame_count += 1
+        if current_time_ms > framerate_info.next_sample_time_ms {
+            fmt.println("FPS:", framerate_info.sample_frame_count)
+
+            framerate_info.sample_frame_count = 0
+            framerate_info.next_sample_time_ms += 1000
+        }
+
         // Handle events
         for sdl.PollEvent(&event) {
             #partial switch event.type {
