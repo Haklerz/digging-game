@@ -27,7 +27,7 @@ render :: proc(target_surface: ^sdl.Surface, render_state: ^Render_State) {
     // TODO: Render entities
 }
 
-Direction :: enum {
+Neighbour_Direction :: enum {
     EAST,
     SOUTH_EAST,
     SOUTH,
@@ -41,7 +41,7 @@ Direction :: enum {
 // Used for querying blocks from a chunk and it's 8 neighbours.
 Chunk_Neighbourhood :: struct {
     chunk: ^common.Chunk,
-    neighbours: [Direction]^common.Chunk
+    neighbours: [Neighbour_Direction]^common.Chunk
 }
 
 chunk_neighbourhood_get_block :: proc(neighbourhood: Chunk_Neighbourhood, block: [2]int) -> common.Block_Type {
