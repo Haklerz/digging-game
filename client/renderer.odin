@@ -4,6 +4,7 @@ import "../common"
 import sdl "vendor:sdl3"
 import "core:math"
 
+ATLAS_SIZE_TILES :: 32
 TILE_SIZE :: 8
 
 Render_State :: struct {
@@ -86,26 +87,24 @@ Chunk_Renderer :: struct {
 render_chunk :: proc(target_surface, tile_atlas: ^sdl.Surface, chunk: ^Chunk_Renderer) { // TODO: Take in camera
 
     for tile_id, i in chunk.tile_ids {
-        tile_position, texture_source: [2]i32
+        atlas_rect := sdl.Rect{w = TILE_SIZE, h = TILE_SIZE}
+        atlas_rect.y, atlas_rect.x = math.divmod(i32(tile_id), ATLAS_SIZE_TILES)
 
-        // TODO: Will need half a tile offset for dual grid tiles.
-        tile_position.y, tile_position.x = math.divmod(i32(i), i32(common.CHUNK_SIZE)) // Tile offset from chunk in tile-space
-        tile_position += chunk.position * i32(common.CHUNK_SIZE) // Chunk offset in tile-space
-        tile_position *= TILE_SIZE
+        // Convert to pixel-space
+        atlas_rect.x *= TILE_SIZE
+        atlas_rect.y *= TILE_SIZE
 
-        texture_source.y, texture_source.x = math.divmod(i32(tile_id), 32)
-        texture_source *= TILE_SIZE
+        // TODO: Target will need half a tile offset for dual grid tiles
+        target_rect := sdl.Rect{w = TILE_SIZE, h = TILE_SIZE}
+        target_rect.y, target_rect.x = math.divmod(i32(i), common.CHUNK_SIZE) // Offset within chunk
+        target_rect.x += chunk.position.x * common.CHUNK_SIZE
+        target_rect.y += chunk.position.y * common.CHUNK_SIZE
 
-        sdl.BlitSurface(
-            tile_atlas, {
-                texture_source.x, texture_source.y,
-                TILE_SIZE, TILE_SIZE
-            },
-            target_surface, {
-                tile_position.x, tile_position.y,
-                TILE_SIZE, TILE_SIZE
-            }
-        )
+        // Convert to pixel-space
+        target_rect.x *= TILE_SIZE
+        target_rect.y *= TILE_SIZE
+
+        sdl.BlitSurface(tile_atlas, atlas_rect, target_surface, target_rect)
     }
 
     // TODO: Draw debug outline
