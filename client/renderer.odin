@@ -7,20 +7,22 @@ import "core:math"
 TILE_SIZE :: 8
 
 Render_State :: struct {
-    tile_atlas      : ^sdl.Surface,
+    tile_atlas: ^sdl.Surface,
 
-    // TODO: Re-introduce World_Renderer
+    world_renderer: World_Renderer
+}
+
+World_Renderer :: struct {
     chunks          : [common.MAX_LOADED_CHUNKS]Chunk_Renderer,
     chunk_count     : uint,
-
-    entity_renderer : Entity_Renderer
 }
 
 render :: proc(target_surface: ^sdl.Surface, render_state: ^Render_State) {
-    using render_state
-
     // Render world
-    for &chunk in chunks[:chunk_count] do render_chunk(target_surface, render_state.tile_atlas, &chunk)
+    {
+        using render_state.world_renderer
+        for &chunk in chunks[:chunk_count] do render_chunk(target_surface, render_state.tile_atlas, &chunk)
+    }
 
     // TODO: Render entities
 }
@@ -48,23 +50,17 @@ chunk_neighbourhood_get_block :: proc(neighbourhood: Chunk_Neighbourhood, block:
     return .VOID
 }
 
-update_world_renderer :: proc(
-    render_state: ^Render_State,
-    game_state: ^common.Game_State // TODO: Re-introduce World_State and World_Renderer structs for this.
-) {
-    render_state.chunk_count = game_state.chunk_count
-    
-    for &chunk, i in game_state.chunks[:game_state.chunk_count] {
-        update_chunk_renderer(&render_state.chunks[i], {chunk = &chunk})
+// TODO: Rename to sync_world_renderer
+sync_world_renderer :: proc(world_renderer: ^World_Renderer, world_state: ^common.World_State) {
+    world_renderer.chunk_count = world_state.chunk_count
+
+    for &chunk, i in world_state.chunks[:world_state.chunk_count] {
+        sync_chunk_renderer(&world_renderer.chunks[i], {chunk = &chunk})
     }
 }
 
-update_chunk_renderer :: proc(
-    chunk_renderer: ^Chunk_Renderer,
-    neighbourhood: Chunk_Neighbourhood
-) {
-    chunk_renderer.position.x = i32(neighbourhood.chunk.position.x)
-    chunk_renderer.position.y = i32(neighbourhood.chunk.position.y)
+sync_chunk_renderer :: proc(chunk_renderer: ^Chunk_Renderer, neighbourhood: Chunk_Neighbourhood) {
+    chunk_renderer.position = neighbourhood.chunk.position
 
     // Just map blocks to tiles right now.
     // TODO: Will need to change when dual grid tiles are introduced.
@@ -114,5 +110,3 @@ render_chunk :: proc(target_surface, tile_atlas: ^sdl.Surface, chunk: ^Chunk_Ren
 
     // TODO: Draw debug outline
 }
-
-Entity_Renderer :: struct {}

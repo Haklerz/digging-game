@@ -11,18 +11,16 @@ WINDOW_SIZE_INIT    :: [2]i32{ 320 * 2, 240 * 2}
 
 ATLAS_PATH          :: "res/atlas.bmp"
 
-make_chunk :: proc(game_state: ^common.Game_State, chunk_position: [2]int) {
-    assert(game_state.chunk_count < common.MAX_LOADED_CHUNKS)
+make_chunk :: proc(world_state: ^common.World_State, chunk: common.Chunk_Position) {
+    using world_state
+    assert(chunk_count < common.MAX_LOADED_CHUNKS)
 
-    game_state.chunks[game_state.chunk_count] = {
-        position = chunk_position
+    chunks[chunk_count].position = chunk
+    for &block in chunks[chunk_count].blocks {
+        block = .CAVE_WALL if sdl.rand(5) == 0 else .CAVE_FLOOR
     }
 
-    for &block in game_state.chunks[game_state.chunk_count].blocks {
-        block = .CAVE_FLOOR if sdl.rand(2) == 0 else .CAVE_WALL
-    }
-
-    game_state.chunk_count += 1
+    chunk_count += 1
 }
 
 Framerate_Info :: struct {
@@ -54,12 +52,12 @@ main :: proc() {
     render_state.tile_atlas = sdl.LoadBMP(ATLAS_PATH)
 
     // Make temporary game state
-    game_state: common.Game_State
-    make_chunk(&game_state, {0, 0})
-    make_chunk(&game_state, {1, 1})
-    make_chunk(&game_state, {2, 1})
+    game_state := common.Game_State{}
+    make_chunk(&game_state.world_state, {0, 0})
+    make_chunk(&game_state.world_state, {1, 1})
+    make_chunk(&game_state.world_state, {2, 1})
 
-    update_world_renderer(&render_state, &game_state)
+    sync_world_renderer(&render_state.world_renderer, &game_state.world_state)
 
     framerate_info := Framerate_Info{}
 

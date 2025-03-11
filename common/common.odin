@@ -4,6 +4,10 @@ MAX_LOADED_CHUNKS :: 32
 CHUNK_SIZE :: 16
 
 Game_State :: struct {
+    world_state: World_State
+}
+
+World_State :: struct {
     chunks: [MAX_LOADED_CHUNKS]Chunk,
     chunk_count: uint
 }
