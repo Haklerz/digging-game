@@ -44,7 +44,7 @@ Chunk_Neighbourhood :: struct {
     neighbours: [Neighbour_Direction]^common.Chunk
 }
 
-chunk_neighbourhood_get_block :: proc(neighbourhood: Chunk_Neighbourhood, block: [2]int) -> common.Block_Type {
+chunk_neighbourhood_get_block :: proc(neighbourhood: Chunk_Neighbourhood, block: common.Block_Position) -> common.Block_Type {
     // TODO: Figure out which chunk we are in, and what block in that chunk.
     //       If a chunk is not loaded, return a VOID block.
     return .VOID
@@ -79,7 +79,7 @@ sync_chunk_renderer :: proc(chunk_renderer: ^Chunk_Renderer, neighbourhood: Chun
 }
 
 Chunk_Renderer :: struct {
-    position: [2]i32,
+    position: common.Chunk_Position,
     tile_ids: [common.CHUNK_SIZE * common.CHUNK_SIZE]u8
 }
 
