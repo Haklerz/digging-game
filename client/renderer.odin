@@ -8,24 +8,31 @@ ATLAS_SIZE_TILES :: 32
 TILE_SIZE :: 8
 
 Render_State :: struct {
-    tile_atlas: ^sdl.Surface,
-
+    camera: Camera,
     world_renderer: World_Renderer
 }
 
 World_Renderer :: struct {
-    chunks          : [common.MAX_LOADED_CHUNKS]Chunk_Renderer,
-    chunk_count     : uint,
+    tile_atlas: ^sdl.Surface,
+    chunks: [common.MAX_LOADED_CHUNKS]Chunk_Renderer,
+    chunk_count: uint,
 }
 
-render :: proc(target_surface: ^sdl.Surface, render_state: ^Render_State) {
-    // Render world
-    {
-        using render_state.world_renderer
-        for &chunk in chunks[:chunk_count] do render_chunk(target_surface, render_state.tile_atlas, &chunk)
+update_render_state :: proc(render_state: ^Render_State, input_state: ^Input_State, delta_time: f32) {
+    input_delta := [2]f32{
+        f32(i32(.RIGHT in input_state.is_down) - i32(.LEFT in input_state.is_down)),
+        f32(i32(.DOWN in input_state.is_down) - i32(.UP in input_state.is_down))
     }
 
-    // TODO: Render entities
+    // Normalize
+    if input_delta.x * input_delta.x + input_delta.y * input_delta.y > 1 do input_delta /= math.SQRT_TWO
+
+    render_state.camera.position += input_delta * 10 * delta_time
+}
+
+render_world :: proc(target_surface: ^sdl.Surface, world_renderer: ^World_Renderer, camera: ^Camera) {
+    using world_renderer
+    for &chunk in chunks[:chunk_count] do render_chunk(target_surface, world_renderer.tile_atlas, &chunk, camera)
 }
 
 Neighbour_Direction :: enum {
@@ -51,7 +58,6 @@ chunk_neighbourhood_get_block :: proc(neighbourhood: Chunk_Neighbourhood, block:
     return .VOID
 }
 
-// TODO: Rename to sync_world_renderer
 sync_world_renderer :: proc(world_renderer: ^World_Renderer, world_state: ^common.World_State) {
     world_renderer.chunk_count = world_state.chunk_count
 
@@ -84,7 +90,7 @@ Chunk_Renderer :: struct {
     tile_ids: [common.CHUNK_SIZE * common.CHUNK_SIZE]u8
 }
 
-render_chunk :: proc(target_surface, tile_atlas: ^sdl.Surface, chunk: ^Chunk_Renderer) { // TODO: Take in camera
+render_chunk :: proc(target_surface, tile_atlas: ^sdl.Surface, chunk: ^Chunk_Renderer, camera: ^Camera) {
 
     for tile_id, i in chunk.tile_ids {
         atlas_rect := sdl.Rect{w = TILE_SIZE, h = TILE_SIZE}
@@ -103,6 +109,11 @@ render_chunk :: proc(target_surface, tile_atlas: ^sdl.Surface, chunk: ^Chunk_Ren
         // Convert to pixel-space
         target_rect.x *= TILE_SIZE
         target_rect.y *= TILE_SIZE
+
+        // Offset based on camera
+        render_offset := camera_get_render_offset(camera)
+        target_rect.x += render_offset.x
+        target_rect.y += render_offset.y
 
         sdl.BlitSurface(tile_atlas, atlas_rect, target_surface, target_rect)
     }

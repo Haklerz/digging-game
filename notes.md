@@ -1,5 +1,3 @@
-* Build server side code first.
-
 # Notes from Daniel P H Fox's "Daydream" devlogs
 
 ## Chunking system
