@@ -7,8 +7,8 @@ import "core:thread"
 
 WINDOW_TITLE        :: "Digging Game"
 
-TARGET_SIZE         :: [2]i32{ 320, 240}
-WINDOW_SIZE_INIT    :: [2]i32{ 320 * 2, 240 * 2}
+TARGET_SIZE         :: [2]i32{ 480, 270}
+WINDOW_SIZE_INIT    :: [2]i32{ 480 * 2, 270 * 2}
 
 ATLAS_PATH          :: "res/atlas.bmp"
 
