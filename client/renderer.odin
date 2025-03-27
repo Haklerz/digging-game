@@ -36,14 +36,9 @@ render_world :: proc(target_surface: ^sdl.Surface, world_renderer: ^World_Render
 }
 
 Neighbour_Direction :: enum {
-    EAST,
-    SOUTH_EAST,
-    SOUTH,
-    SOUTH_WEST,
     WEST,
     NORTH_WEST,
     NORTH,
-    NORTH_EAST,
 }
 
 // Used for querying blocks from a chunk and it's 8 neighbours.
@@ -53,45 +48,81 @@ Chunk_Neighbourhood :: struct {
 }
 
 chunk_neighbourhood_get_block :: proc(neighbourhood: Chunk_Neighbourhood, block: common.Block_Position) -> common.Block_Type {
-    // TODO: Figure out which chunk we are in, and what block in that chunk.
-    //       If a chunk is not loaded, return a VOID block.
-    return .VOID
+    block := block
+
+    chunk : ^common.Chunk
+    if block.x < 0 && block.y < 0 {
+        block += {common.CHUNK_SIZE, common.CHUNK_SIZE}
+        chunk = neighbourhood.neighbours[.NORTH_WEST]
+    }
+    else if block.x < 0 {
+        block += {common.CHUNK_SIZE, 0}
+        chunk = neighbourhood.neighbours[.WEST]
+    }
+    else if block.y < 0 {
+        block += {0, common.CHUNK_SIZE}
+        chunk = neighbourhood.neighbours[.NORTH]
+    }
+    else {
+        chunk = neighbourhood.chunk
+    }
+
+    if chunk == nil do return .VOID
+
+    return common.chunk_get_block(chunk, block)
 }
 
 sync_world_renderer :: proc(world_renderer: ^World_Renderer, world_state: ^common.World_State) {
     world_renderer.chunk_count = world_state.chunk_count
 
     for &chunk, i in world_state.chunks[:world_state.chunk_count] {
-        sync_chunk_renderer(&world_renderer.chunks[i], {chunk = &chunk})
+        neighbourhood := Chunk_Neighbourhood{chunk = &chunk}
+
+        neighbour_index, ok := common.get_chunk_index(world_state, chunk.position + {0, -1})
+        if ok do neighbourhood.neighbours[.NORTH] = &world_state.chunks[neighbour_index]
+
+        neighbour_index, ok = common.get_chunk_index(world_state, chunk.position + {-1, 0})
+        if ok do neighbourhood.neighbours[.WEST] = &world_state.chunks[neighbour_index]
+
+        neighbour_index, ok = common.get_chunk_index(world_state, chunk.position + {-1, -1})
+        if ok do neighbourhood.neighbours[.NORTH_WEST] = &world_state.chunks[neighbour_index]
+
+        if chunk.is_dirty {
+            sync_chunk_renderer(&world_renderer.chunks[i], neighbourhood)
+            chunk.is_dirty = false
+        }
     }
 }
 
 sync_chunk_renderer :: proc(chunk_renderer: ^Chunk_Renderer, neighbourhood: Chunk_Neighbourhood) {
     chunk_renderer.position = neighbourhood.chunk.position
 
-    // Just map blocks to tiles right now.
-    // TODO: Will need to change when dual grid tiles are introduced.
-    for block, i in neighbourhood.chunk.blocks {
-        #partial switch block {
-        case .CAVE_FLOOR:
-            chunk_renderer.tile_ids[i] = 0
+    // TODO: Figure out what tile to use in a sane way. This is stupid.
+    tile_id_mapping := [16]u8{
+        96, 99, 64, 65,
+        00, 67, 98, 35,
+        97, 32, 01, 66,
+        03, 02, 33, 34,
+    }
 
-        case .CAVE_WALL:
-            chunk_renderer.tile_ids[i] = 1
+    for tile_y in 0..<common.CHUNK_SIZE do for tile_x in 0..<common.CHUNK_SIZE {
+        tile_id := u8(chunk_neighbourhood_get_block(neighbourhood, {tile_x - 1, tile_y - 1}) != .VOID)
+        tile_id |= u8(chunk_neighbourhood_get_block(neighbourhood, {tile_x - 0, tile_y - 1}) != .VOID) << 1
+        tile_id |= u8(chunk_neighbourhood_get_block(neighbourhood, {tile_x - 1, tile_y - 0}) != .VOID) << 2
+        tile_id |= u8(chunk_neighbourhood_get_block(neighbourhood, {tile_x - 0, tile_y - 0}) != .VOID) << 3
 
-        case:
-            chunk_renderer.tile_ids[i] = 69
-        }
+        chunk_renderer.tile_ids[common.CHUNK_SIZE * tile_y + tile_x] = tile_id_mapping[tile_id]
     }
 }
 
 Chunk_Renderer :: struct {
     position: common.Chunk_Position,
-    tile_ids: [common.CHUNK_SIZE * common.CHUNK_SIZE]u8
+    tile_ids: [common.CHUNK_SIZE * common.CHUNK_SIZE]u8,
 }
 
 render_chunk :: proc(target_surface, tile_atlas: ^sdl.Surface, chunk: ^Chunk_Renderer, camera: ^Camera) {
 
+    render_offset := camera_get_render_offset(camera)
     for tile_id, i in chunk.tile_ids {
         atlas_rect := sdl.Rect{w = TILE_SIZE, h = TILE_SIZE}
         atlas_rect.y, atlas_rect.x = math.divmod(i32(tile_id), ATLAS_SIZE_TILES)
@@ -100,7 +131,6 @@ render_chunk :: proc(target_surface, tile_atlas: ^sdl.Surface, chunk: ^Chunk_Ren
         atlas_rect.x *= TILE_SIZE
         atlas_rect.y *= TILE_SIZE
 
-        // TODO: Target will need half a tile offset for dual grid tiles
         target_rect := sdl.Rect{w = TILE_SIZE, h = TILE_SIZE}
         target_rect.y, target_rect.x = math.divmod(i32(i), common.CHUNK_SIZE) // Offset within chunk
         target_rect.x += chunk.position.x * common.CHUNK_SIZE
@@ -109,14 +139,18 @@ render_chunk :: proc(target_surface, tile_atlas: ^sdl.Surface, chunk: ^Chunk_Ren
         // Convert to pixel-space
         target_rect.x *= TILE_SIZE
         target_rect.y *= TILE_SIZE
+        target_rect.x -= TILE_SIZE / 2
+        target_rect.y -= TILE_SIZE / 2
 
         // Offset based on camera
-        render_offset := camera_get_render_offset(camera)
         target_rect.x += render_offset.x
         target_rect.y += render_offset.y
 
         sdl.BlitSurface(tile_atlas, atlas_rect, target_surface, target_rect)
     }
 
-    // TODO: Draw debug outline
+    sdl.WriteSurfacePixel(target_surface, chunk.position.x * common.CHUNK_SIZE * TILE_SIZE + render_offset.x, chunk.position.y * common.CHUNK_SIZE * TILE_SIZE + render_offset.y, 0, 255, 0, 255)
+    sdl.WriteSurfacePixel(target_surface, (chunk.position.x + 1) * common.CHUNK_SIZE * TILE_SIZE + render_offset.x, chunk.position.y * common.CHUNK_SIZE * TILE_SIZE + render_offset.y, 0, 255, 0, 255)
+    sdl.WriteSurfacePixel(target_surface, chunk.position.x * common.CHUNK_SIZE * TILE_SIZE + render_offset.x, (chunk.position.y + 1) * common.CHUNK_SIZE * TILE_SIZE + render_offset.y, 0, 255, 0, 255)
+    sdl.WriteSurfacePixel(target_surface, (chunk.position.x + 1) * common.CHUNK_SIZE * TILE_SIZE + render_offset.x, (chunk.position.y + 1) * common.CHUNK_SIZE * TILE_SIZE + render_offset.y, 0, 255, 0, 255)
 }
