@@ -3,6 +3,7 @@ package common
 import "core:math/fixed"
 import "core:math/rand"
 import "core:thread"
+import "core:sync"
 import "core:time"
 import "core:fmt"
 
@@ -53,11 +54,45 @@ chunk_set_block :: proc(chunk: ^Chunk, block: Block_Position, type: Block_Type) 
 
 Simulation_State :: struct {
     game_state: Game_State,
+    game_state_mutex: sync.Mutex,
     do_stop: bool,
+}
+
+get_chunk_index :: proc(world_state: ^World_State, position: Chunk_Position) -> (index: int, ok: bool) {
+    for &chunk, i in world_state.chunks {
+        if chunk.position == position do return i, true
+    }
+
+    return 0, false
+}
+
+load_chunk :: proc(world_state: ^World_State, chunk: Chunk_Position) {
+    using world_state
+    assert(chunk_count < MAX_LOADED_CHUNKS)
+
+    chunks[chunk_count].position = chunk
+    for &block in chunks[chunk_count].blocks {
+        block = .VOID if rand.float32() < 0.4 else .CAVE_FLOOR
+    }
+    chunks[chunk_count].is_dirty = true
+
+    chunk_count += 1
+}
+
+SPAWN_CHUNKS_RADIUS : i32 : 2
+
+init_world_state :: proc(world_state: ^World_State) {
+    // Load spawn chunks
+    for y in -SPAWN_CHUNKS_RADIUS..=SPAWN_CHUNKS_RADIUS do for x in -SPAWN_CHUNKS_RADIUS..=SPAWN_CHUNKS_RADIUS {
+        load_chunk(world_state, {x, y})
+    }
 }
 
 simulation_thread_proc :: proc(state: ^Simulation_State) {
     using state
+
+
+    init_world_state(&game_state.world_state)
 
     delta :: 50 * time.Millisecond
 
@@ -78,7 +113,9 @@ simulation_thread_proc :: proc(state: ^Simulation_State) {
             next_tick += delta
         }
 
+        sync.lock(&game_state_mutex)
         update_game_state(tick_count, &game_state)
+        sync.unlock(&game_state_mutex)
     }
     fmt.println("[Tick", tick_count, "]: Stop requested.")
 }
@@ -87,15 +124,17 @@ simulation_thread_proc :: proc(state: ^Simulation_State) {
 update_game_state :: proc(tick_count: u64, game_state: ^Game_State) {
     using game_state.world_state
     for &chunk in chunks[:chunk_count] {
-        if rand.float32() > 0.01 do continue
-
         for y in 0..<CHUNK_SIZE do for x in 0..<CHUNK_SIZE {
-            if chunk_get_block(&chunk, {x, y}) == .CAVE_WALL do continue
-            if rand.float32() > 0.01 do continue
+            if rand.float32() > 0.00005 do continue
 
-            chunk_set_block(&chunk, {x, y}, .CAVE_WALL)
-            chunk.is_dirty = true
-            fmt.println("[Sim", tick_count, "]: Block at", x, y, "turned to Wall.")
+            block := chunk_get_block(&chunk, {x, y})
+            #partial switch block {
+            case .CAVE_FLOOR:
+                block = .VOID
+            case .VOID:
+                block = .CAVE_FLOOR
+            }
+            chunk_set_block(&chunk, {x, y}, block)
         }
     }
 }

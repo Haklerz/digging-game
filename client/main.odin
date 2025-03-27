@@ -4,6 +4,7 @@ import "../common"
 import "core:fmt"
 import sdl "vendor:sdl3"
 import "core:thread"
+import "core:sync"
 
 WINDOW_TITLE        :: "Digging Game"
 
@@ -11,18 +12,6 @@ TARGET_SIZE         :: [2]i32{ 480, 270}
 WINDOW_SIZE_INIT    :: [2]i32{ 480 * 2, 270 * 2}
 
 ATLAS_PATH          :: "res/atlas.bmp"
-
-make_chunk :: proc(world_state: ^common.World_State, chunk: common.Chunk_Position) {
-    using world_state
-    assert(chunk_count < common.MAX_LOADED_CHUNKS)
-
-    chunks[chunk_count].position = chunk
-    for &block in chunks[chunk_count].blocks {
-        block = .CAVE_WALL if sdl.rand(5) == 0 else .CAVE_FLOOR
-    }
-
-    chunk_count += 1
-}
 
 Frame_Info :: struct {
     next_sample_time_ms: u64,
@@ -73,8 +62,6 @@ main :: proc() {
 
     // Start the simulation thread
     simulation_state := common.Simulation_State{}
-    make_chunk(&simulation_state.game_state.world_state, {0, 0})
-    sync_world_renderer(&render_state.world_renderer, &simulation_state.game_state.world_state)
     simulation_thread := thread.create_and_start_with_poly_data(&simulation_state, common.simulation_thread_proc)
     defer thread.destroy(simulation_thread)
 
@@ -94,11 +81,14 @@ main :: proc() {
 
             fmt.println("FPS:", frame_info.current_fps)
 
-            // TODO: This is unsafe. Needs mutex
-            sync_world_renderer(&render_state.world_renderer, &simulation_state.game_state.world_state)
-
             frame_info.sample_frame_count = 0
             frame_info.next_sample_time_ms += 1000
+        }
+
+        if sync.try_lock(&simulation_state.game_state_mutex) {
+            defer sync.unlock(&simulation_state.game_state_mutex)
+
+            sync_world_renderer(&render_state.world_renderer, &simulation_state.game_state.world_state)
         }
 
         handle_input :: proc(input_state: ^Input_State, key: sdl.KeyboardEvent) {
@@ -125,7 +115,6 @@ main :: proc() {
         // Handle events
         for sdl.PollEvent(&event) {
             #partial switch event.type {
-            
             case .KEY_DOWN, .KEY_UP:
                 handle_input(&input_state, event.key)
             case .QUIT:
@@ -144,7 +133,7 @@ main :: proc() {
             render_world(target_surface, &render_state.world_renderer, &render_state.camera)
 
             // Draw crosshair
-            sdl.WriteSurfacePixel(target_surface, TARGET_SIZE.x / 2, TARGET_SIZE.y / 2, 255,255,255,255)
+            sdl.WriteSurfacePixel(target_surface, TARGET_SIZE.x / 2, TARGET_SIZE.y / 2, 255, 255, 255, 255)
         }
 
         // Calculate letterboxing
