@@ -9,15 +9,22 @@
 
 - [x] Sync render state with world state.
 - [x] Render loaded chunks using "on-grid" tiles.
-- [ ] Render using "dual-grid" tiles.
+- [x] Render using "dual-grid" tiles.
+- [ ] Cull offscreen chunks.
+
+# Particle System
+
+- [ ] Server side particle emitters.
+- [ ] Client side particles.
 
 # Client
 
-- [ ] Reduce framerate when windows is not focused.
+- [ ] Reduce framerate when window is not focused.
 
 # Entity system
 
 - [ ] Make simple entities with a position and collider that can move around the world.
+- [ ] Entities will request chunks to be loaded around them. (Players)
 
 # Entity rendering
 
