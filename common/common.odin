@@ -7,7 +7,7 @@ import "core:time"
 import "core:fmt"
 
 MAX_LOADED_CHUNKS :: 32
-CHUNK_SIZE : i32 : 8
+CHUNK_SIZE : i32 : 16
 
 Game_State :: struct {
     world_state: World_State
