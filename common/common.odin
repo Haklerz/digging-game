@@ -1,5 +1,6 @@
 package common
 
+import "core:math"
 import "core:math/fixed"
 import "core:math/rand"
 import "core:thread"
@@ -11,7 +12,8 @@ MAX_LOADED_CHUNKS :: 32
 CHUNK_SIZE : i32 : 16
 
 Game_State :: struct {
-    world_state: World_State
+    world_state: World_State,
+    player: Entity, // The player will just be another one of the entities eventually.
 }
 
 World_State :: struct {
@@ -36,6 +38,27 @@ Chunk :: struct {
     is_dirty: bool,
 }
 
+Input_Command :: enum {
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT,
+    USE,
+    CANCEL
+}
+
+Input_Commands :: bit_set[Input_Command]
+
+Input_State :: struct {
+    is_down: Input_Commands
+}
+
+Entity :: struct {
+    id: uint,
+    position: World_Position,
+    input: Input_State,
+}
+
 chunk_get_block :: proc(chunk: ^Chunk, block: Block_Position) -> Block_Type {
     if block.x < 0 || block.x >= CHUNK_SIZE do return .VOID
     if block.y < 0 || block.y >= CHUNK_SIZE do return .VOID
@@ -55,6 +78,7 @@ chunk_set_block :: proc(chunk: ^Chunk, block: Block_Position, type: Block_Type) 
 Simulation_State :: struct {
     game_state: Game_State,
     game_state_mutex: sync.Mutex,
+    unsynced_ticks: sync.Sema,
     do_stop: bool,
 }
 
@@ -88,13 +112,12 @@ init_world_state :: proc(world_state: ^World_State) {
     }
 }
 
+DELTA_TIME :: 50 * time.Millisecond
+
 simulation_thread_proc :: proc(state: ^Simulation_State) {
     using state
 
-
     init_world_state(&game_state.world_state)
-
-    delta :: 50 * time.Millisecond
 
     start_time := time.now()
     next_tick := time.Duration(0)
@@ -110,31 +133,56 @@ simulation_thread_proc :: proc(state: ^Simulation_State) {
 
         defer {
             tick_count += 1
-            next_tick += delta
+            next_tick += DELTA_TIME
         }
 
         sync.lock(&game_state_mutex)
         update_game_state(tick_count, &game_state)
         sync.unlock(&game_state_mutex)
+
+        sync.post(&unsynced_ticks)
     }
     fmt.println("[Tick", tick_count, "]: Stop requested.")
 }
 
+update_player :: proc(player: ^Entity) {
+    delta_time_s := time.duration_seconds(DELTA_TIME) // TODO: No need to calculate this every tick.
+
+    delta: [2]f64
+    delta.x = f64(int(.RIGHT in player.input.is_down) - int(.LEFT in player.input.is_down))
+    delta.y = f64(int(.DOWN in player.input.is_down) - int(.UP in player.input.is_down))
+
+    // Normalize
+    if delta.x * delta.x + delta.y * delta.y > 1 do delta /= math.SQRT_TWO
+
+    delta *= 5.0 * delta_time_s
+
+    delta_fixed: World_Position
+    fixed.init_from_f64(&delta_fixed.x, delta.x)
+    fixed.init_from_f64(&delta_fixed.y, delta.y)
+
+    player.position.x = fixed.add(player.position.x, delta_fixed.x)
+    player.position.y = fixed.add(player.position.y, delta_fixed.y)
+}
+
 // TODO: Will need to create a new copy of the game state, instead of modifying when rollback is implemented.
 update_game_state :: proc(tick_count: u64, game_state: ^Game_State) {
-    using game_state.world_state
-    for &chunk in chunks[:chunk_count] {
-        for y in 0..<CHUNK_SIZE do for x in 0..<CHUNK_SIZE {
-            if rand.float32() > 0.00005 do continue
-
-            block := chunk_get_block(&chunk, {x, y})
-            #partial switch block {
-            case .CAVE_FLOOR:
-                block = .VOID
-            case .VOID:
-                block = .CAVE_FLOOR
+    update_player(&game_state.player)
+    {
+        using game_state.world_state
+        for &chunk in chunks[:chunk_count] {
+            for y in 0..<CHUNK_SIZE do for x in 0..<CHUNK_SIZE {
+                if rand.float32() > 0.00005 do continue
+    
+                block := chunk_get_block(&chunk, {x, y})
+                #partial switch block {
+                case .CAVE_FLOOR:
+                    block = .VOID
+                case .VOID:
+                    block = .CAVE_FLOOR
+                }
+                chunk_set_block(&chunk, {x, y}, block)
             }
-            chunk_set_block(&chunk, {x, y}, block)
         }
     }
 }

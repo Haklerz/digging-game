@@ -9,7 +9,8 @@ TILE_SIZE :: 8
 
 Render_State :: struct {
     camera: Camera,
-    world_renderer: World_Renderer
+    world_renderer: World_Renderer,
+    player_renderer: Entity_Renderer,
 }
 
 World_Renderer :: struct {
@@ -18,16 +19,19 @@ World_Renderer :: struct {
     chunk_count: uint,
 }
 
-update_render_state :: proc(render_state: ^Render_State, input_state: ^Input_State, delta_time: f32) {
-    input_delta := [2]f32{
-        f32(i32(.RIGHT in input_state.is_down) - i32(.LEFT in input_state.is_down)),
-        f32(i32(.DOWN in input_state.is_down) - i32(.UP in input_state.is_down))
-    }
+Entity_Renderer :: struct {
+    position: [2]f32
+    // TODO: Add required state to be able to interpolate entity position.
+    // TODO: Render entity instead of camera crosshair.
+}
 
-    // Normalize
-    if input_delta.x * input_delta.x + input_delta.y * input_delta.y > 1 do input_delta /= math.SQRT_TWO
+render_player :: proc(target_surface: ^sdl.Surface, player: ^Entity_Renderer, camera: ^Camera) {
+    camera_offset := camera_get_render_offset(camera)
+    sdl.WriteSurfacePixel(target_surface, i32(player.position.x * TILE_SIZE) + camera_offset.x, i32(player.position.y * TILE_SIZE) + camera_offset.y, 255, 63, 127, 255)
+}
 
-    render_state.camera.position += input_delta * 10 * delta_time
+update_render_state :: proc(render_state: ^Render_State, camera_target: [2]f32, delta_time: f32) {
+    camera_approach(&render_state.camera, camera_target, 10, delta_time)
 }
 
 render_world :: proc(target_surface: ^sdl.Surface, world_renderer: ^World_Renderer, camera: ^Camera) {

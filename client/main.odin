@@ -5,11 +5,13 @@ import "core:fmt"
 import sdl "vendor:sdl3"
 import "core:thread"
 import "core:sync"
+import "core:time"
+import "core:math/fixed"
 
 WINDOW_TITLE        :: "Digging Game"
 
-TARGET_SIZE         :: [2]i32{ 480, 270}
-WINDOW_SIZE_INIT    :: [2]i32{ 480 * 2, 270 * 2}
+TARGET_SIZE         :: [2]i32{480, 270}
+WINDOW_SIZE_INIT    :: [2]i32{480 * 2, 270 * 2}
 
 ATLAS_PATH          :: "res/atlas.bmp"
 
@@ -18,21 +20,6 @@ Frame_Info :: struct {
     sample_frame_count: uint,
     last_frame_time_ms: u64,
     current_fps: uint
-}
-
-Input_Command :: enum {
-    UP,
-    DOWN,
-    LEFT,
-    RIGHT,
-    USE,
-    CANCEL
-}
-
-Input_Commands :: bit_set[Input_Command]
-
-Input_State :: struct {
-    is_down: Input_Commands
 }
 
 main :: proc() {
@@ -46,7 +33,7 @@ main :: proc() {
     defer sdl.DestroyRenderer(window_renderer)
 
     sdl.SetWindowMinimumSize(window, TARGET_SIZE.x, TARGET_SIZE.y)
-    sdl.SetRenderVSync(window_renderer, 1)
+    // sdl.SetRenderVSync(window_renderer, 1)
 
     min_component :: proc(v: [2]i32) -> i32 {
         return min(v.x, v.y)
@@ -58,7 +45,7 @@ main :: proc() {
     render_state: Render_State
     render_state.world_renderer.tile_atlas = sdl.LoadBMP(ATLAS_PATH)
 
-    input_state: Input_State
+    input_state: common.Input_State
 
     // Start the simulation thread
     simulation_state := common.Simulation_State{}
@@ -85,14 +72,24 @@ main :: proc() {
             frame_info.next_sample_time_ms += 1000
         }
 
-        if sync.try_lock(&simulation_state.game_state_mutex) {
+        // TODO: This seems kinda hacky, but it works so I don't know.
+        if sync.wait_with_timeout(&simulation_state.unsynced_ticks, 1 * time.Nanosecond) {
+            sync.try_lock(&simulation_state.game_state_mutex)
+
             defer sync.unlock(&simulation_state.game_state_mutex)
 
+            // Copy input from client to player.
+            simulation_state.game_state.player.input = input_state
+
             sync_world_renderer(&render_state.world_renderer, &simulation_state.game_state.world_state)
+
+            // Sync player renderer.
+            render_state.player_renderer.position.x = f32(fixed.to_f64(simulation_state.game_state.player.position.x))
+            render_state.player_renderer.position.y = f32(fixed.to_f64(simulation_state.game_state.player.position.y))
         }
 
-        handle_input :: proc(input_state: ^Input_State, key: sdl.KeyboardEvent) {
-            command: Input_Commands
+        handle_input :: proc(input_state: ^common.Input_State, key: sdl.KeyboardEvent) {
+            command: common.Input_Commands
             #partial switch key.scancode {
             case .W, .UP:
                 command = {.UP}
@@ -122,7 +119,8 @@ main :: proc() {
             }
         }
 
-        update_render_state(&render_state, &input_state, delta_time)
+        camera_target: [2]f32
+        update_render_state(&render_state, render_state.player_renderer.position, delta_time)
 
         // Draw to rendering target
         target_surface: ^sdl.Surface
@@ -131,6 +129,7 @@ main :: proc() {
 
             sdl.ClearSurface(target_surface, 0, 0, 0, sdl.ALPHA_OPAQUE_FLOAT)
             render_world(target_surface, &render_state.world_renderer, &render_state.camera)
+            render_player(target_surface, &render_state.player_renderer, &render_state.camera)
 
             // Draw crosshair
             sdl.WriteSurfacePixel(target_surface, TARGET_SIZE.x / 2, TARGET_SIZE.y / 2, 255, 255, 255, 255)
